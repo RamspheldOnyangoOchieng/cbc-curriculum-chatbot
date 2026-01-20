@@ -7,15 +7,15 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
 });
 
-// Helper to get embeddings from Hugging Face (matches backend)
+// Helper to get embeddings from Hugging Face
 async function getQueryEmbedding(text: string) {
     const hfToken = process.env.HUGGINGFACE_TOKEN;
-    if (!hfToken) {
-        console.error("Missing HUGGINGFACE_TOKEN in Vercel.");
-        return null;
-    }
+    if (!hfToken) return null;
 
     try {
+        // BGE models work significantly better when the query is prefixed
+        const prefixedQuery = `Represent this query for retrieving relevant documents: ${text}`;
+
         const response = await fetch(
             "https://router.huggingface.co/hf-inference/models/BAAI/bge-small-en-v1.5",
             {
@@ -24,11 +24,11 @@ async function getQueryEmbedding(text: string) {
                     Authorization: `Bearer ${hfToken}`,
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ inputs: [text], options: { wait_for_model: true } }),
+                body: JSON.stringify({ inputs: [prefixedQuery], options: { wait_for_model: true } }),
             }
         );
         const result = await response.json();
-        return result[0]; // Returns the embedding vector
+        return Array.isArray(result) ? result[0] : null;
     } catch (err) {
         console.error("Embedding failed:", err);
         return null;
@@ -41,28 +41,24 @@ export async function POST(req: NextRequest) {
         const userQuery = messages[messages.length - 1]?.content || "";
 
         // 1. RAG: Fetch relevant context from ChromaCloud (v2 API)
-        let context = "";
+        let contextData: string[] = [];
         try {
-            console.log("RAG: Embedding query...");
             const queryEmbedding = await getQueryEmbedding(userQuery);
 
             if (queryEmbedding) {
-                console.log("RAG: Searching Chroma Cloud via v2 API...");
                 const host = (process.env.CHROMA_HOST || "https://api.trychroma.com").replace(/\/$/, "");
-                const tenant = process.env.CHROMA_TENANT || "default_tenant";
-                const database = process.env.CHROMA_DATABASE || "default_database";
+                const tenant = process.env.CHROMA_TENANT || "bb042f26-2c1c-4c18-844b-a569ea3944b4";
+                const database = process.env.CHROMA_DATABASE || "cbc-chatbot";
                 const apiKey = process.env.CHROMA_API_KEY;
 
-                // A. Get Collection ID
+                // Step A: Find the collection ID
                 const listUrl = `${host}/api/v2/tenants/${tenant}/databases/${database}/collections`;
-                const listResp = await fetch(listUrl, {
-                    headers: { "x-chroma-token": apiKey || "" }
-                });
+                const listResp = await fetch(listUrl, { headers: { "x-chroma-token": apiKey || "" } });
                 const collections = await listResp.json();
-                const collection = collections.find((c: any) => c.name === "Curriculumnpdfs");
+                const collection = Array.isArray(collections) ? collections.find((c: any) => c.name === "Curriculumnpdfs") : null;
 
                 if (collection) {
-                    // B. Query Vector
+                    // Step B: Query with vectors
                     const queryUrl = `${host}/api/v2/tenants/${tenant}/databases/${database}/collections/${collection.id}/query`;
                     const queryResp = await fetch(queryUrl, {
                         method: "POST",
@@ -72,34 +68,39 @@ export async function POST(req: NextRequest) {
                         },
                         body: JSON.stringify({
                             query_embeddings: [queryEmbedding],
-                            n_results: 2,
+                            n_results: 3,
+                            include: ["documents", "metadatas"]
                         })
                     });
+
                     const results = await queryResp.json();
 
-                    if (results.documents && results.documents[0]) {
-                        const docs = results.documents[0].filter((doc: any): doc is string => doc !== null);
-                        context = docs.join("\n\n---\n\n");
-                        console.log(`RAG: Found ${docs.length} context chunks.`);
+                    // Correct v2 response parsing (results.documents is usually a nested array)
+                    if (results && results.documents && results.documents[0]) {
+                        contextData = results.documents[0].filter((d: any) => d !== null);
+                        console.log(`RAG: Successfully retrieved ${contextData.length} documents.`);
                     }
-                } else {
-                    console.warn("RAG: Collection 'Curriculumnpdfs' not found in Cloud.");
                 }
-            } else {
-                console.warn("RAG: Skipping retrieval because embedding failed.");
             }
         } catch (ragError) {
-            console.warn("RAG retrieval failed:", ragError);
+            console.warn("RAG retrieval chain failed:", ragError);
         }
 
-        // 2. Construct Consolidated System Prompt
+        const contextString = contextData.length > 0
+            ? contextData.join("\n\n---\n\n")
+            : "No related documents found. Use provided system knowledge only.";
+
+        // 2. Build the LLM prompt with strict context enforcement
         const systemPromptContent = `
 ${KNOWLEDGE_BASE.SYSTEM_PROMPT_START}
 
 ${KNOWLEDGE_BASE.CRITICAL_RULES}
 
-CONTEXT FROM KNOWLEDGE BASE:
-${context ? context : "No specific documents found. Use your general knowledge and the Key Context provided above."}
+CRITICAL: You MUST prioritize information from the "DOCUMENTS FROM KNOWLEDGE BASE" section below. 
+If the documents explain a term (like KJSEA), use that definition even if your general training data says otherwise.
+
+DOCUMENTS FROM KNOWLEDGE BASE:
+${contextString}
         `.trim();
 
         const systemPrompt = {
@@ -107,17 +108,16 @@ ${context ? context : "No specific documents found. Use your general knowledge a
             content: systemPromptContent
         };
 
-        // 3. Call Groq
+        // 3. Generate response using Groq
         const chatCompletion = await groq.chat.completions.create({
             messages: [systemPrompt, ...messages],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.7,
-            max_tokens: 1024,
-            top_p: 1,
+            temperature: 0.1, // Lower temperature for more factual accuracy
+            max_tokens: 1500,
             stream: false,
         });
 
-        const responseContent = chatCompletion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response at this time.";
+        const responseContent = chatCompletion.choices[0]?.message?.content || "I'm having trouble retrieving an answer.";
 
         return NextResponse.json({
             role: "assistant",
@@ -125,9 +125,10 @@ ${context ? context : "No specific documents found. Use your general knowledge a
         });
 
     } catch (error: any) {
-        console.error("Error in chat API:", error);
-        return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+        console.error("Critical Chat API Error:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }
+
 
 
