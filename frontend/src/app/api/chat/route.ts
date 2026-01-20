@@ -7,31 +7,25 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
 });
 
-// 1. Triple-Query Expansion: Generate 3 variations for deeper breadth
-async function getExpandedQueries(text: string) {
-    try {
-        const prompt = `Convert this CBC question into 3 distinct search keywords or educational phrases for retrieval. Return ONLY a JSON object with key "variations" showing an array of strings. Query: "${text}"`;
-        const completion = await groq.chat.completions.create({
-            messages: [{ role: "user", content: prompt }],
-            model: "llama-3.1-8b-instant", // Very fast for intent expansion
-            temperature: 0,
-            response_format: { type: "json_object" }
-        });
-        const content = completion.choices[0]?.message?.content || "{}";
-        const parsed = JSON.parse(content);
-        return Array.isArray(parsed.variations) ? parsed.variations.slice(0, 3) : [text];
-    } catch (e) {
-        return [text];
-    }
+// 1. Instant Tokenizer: Creates word-by-word variations + key phrases instantly
+function getExpandedQueries(text: string) {
+    const clean = text.replace(/[?.,!]/g, "").toLowerCase();
+    const words = clean.split(/\s+/).filter(w => w.length > 3); // Significant words
+    const variations = [
+        text, // Full Query
+        `CBC curriculum ${text}`, // Contextualized
+        ...words.slice(0, 8) // Individual Word Drills (top 8)
+    ];
+    return Array.from(new Set(variations)); // Unique intents
 }
 
-// 2. Fast Batch Embedding
+// 2. Optimized Batch Embedding (Parallelized)
 async function getBatchEmbeddings(queries: string[]) {
     const hfToken = process.env.HUGGINGFACE_TOKEN;
     if (!hfToken) return [];
 
     try {
-        const prefixedQueries = queries.map(q => `Represent this educational query for retrieval: ${q}`);
+        const prefixedQueries = queries.map(q => `Represent this educational term for retrieval: ${q}`);
         const response = await fetch(
             "https://router.huggingface.co/hf-inference/models/BAAI/bge-small-en-v1.5",
             {
@@ -43,6 +37,7 @@ async function getBatchEmbeddings(queries: string[]) {
         const result = await response.json();
         return Array.isArray(result) ? result : [];
     } catch (err) {
+        console.error("Batch Embedding Err:", err);
         return [];
     }
 }
@@ -55,7 +50,7 @@ async function multiSearch(vectors: any[], host: string, tenant: string, databas
         headers: { "x-chroma-token": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
             query_embeddings: vectors,
-            n_results: 5,
+            n_results: 10, // Max breadth per word-drill
             include: ["documents"]
         })
     });
@@ -64,7 +59,7 @@ async function multiSearch(vectors: any[], host: string, tenant: string, databas
 
 export async function POST(req: NextRequest) {
     const startTime = Date.now();
-    let debugInfo = { mode: "DRILL_SWEEP", depth: 0, time: 0 };
+    let debugInfo = { mode: "DRILL_SEARCH", depth: 0, time: 0 };
 
     try {
         const { messages } = await req.json();
@@ -95,7 +90,6 @@ export async function POST(req: NextRequest) {
 
                 if (memResp.ok) {
                     const memResult = await memResp.json();
-                    // If we found a NEAR PERFECT match (distance < 0.1), use it!
                     if (memResult.distances && memResult.distances[0] && memResult.distances[0][0] < 0.1) {
                         contextData = [memResult.documents[0][0]];
                         debugInfo.mode = "CACHE_HIT";
@@ -106,26 +100,28 @@ export async function POST(req: NextRequest) {
 
         // 2. DRILL & SWEEP (If cache missed)
         if (contextData.length === 0) {
-            // Run Expansion and Collection lookup in PARALLEL to boost speed
-            const [variations, collResp] = await Promise.all([
-                getExpandedQueries(userQuery),
+            debugInfo.mode = "WORD_DRILL";
+            // Parallel intent expansion (Instant) + Collection Check
+            const variations = getExpandedQueries(userQuery);
+            const [vectors, collResp] = await Promise.all([
+                getBatchEmbeddings(variations),
                 fetch(`${host}/api/v2/tenants/${tenant}/databases/${database}/collections/Curriculumnpdfs`, {
                     headers: { "x-chroma-token": apiKey }
                 })
             ]);
 
-            if (collResp.ok) {
+            if (collResp.ok && vectors.length > 0) {
                 const collection = await collResp.json();
-                const vectors = await getBatchEmbeddings(variations);
                 const results = await multiSearch(vectors, host, tenant, database, apiKey, collection.id);
 
                 const seen = new Set();
                 if (results.documents) {
                     results.documents.forEach((docList: any) => {
                         docList.filter((d: any) => d !== null).forEach((d: string) => {
-                            if (!seen.has(d.slice(0, 100))) {
+                            const fingerprint = d.slice(0, 150);
+                            if (!seen.has(fingerprint)) {
                                 contextData.push(d);
-                                seen.add(d.slice(0, 100));
+                                seen.add(fingerprint);
                             }
                         });
                     });
@@ -142,8 +138,11 @@ ${KNOWLEDGE_BASE.SYSTEM_PROMPT_START}
 ${KNOWLEDGE_BASE.CRITICAL_RULES}
 
 ACT AS A CBC EXPERT REFINER.
-Provide a high-quality answer based on these database segments:
-${contextString || "USE YOUR GENERAL TERMINOLOGY FOR CBC."}
+A word-by-word deep drill of the database has retrieved many fragments.
+Your goal is to synthesize these related "scraps" into a definitive and professional answer.
+
+DATABASE FRAGMENTS:
+${contextString || "NO SPECIFIC SCRAPS RETRIEVED. Use general CBC expert terminology."}
         `.trim();
 
         const chatCompletion = await groq.chat.completions.create({
@@ -156,8 +155,8 @@ ${contextString || "USE YOUR GENERAL TERMINOLOGY FOR CBC."}
         const responseContent = chatCompletion.choices[0]?.message?.content || "";
         debugInfo.time = Date.now() - startTime;
 
-        // 4. PERSIST TO MEMORY (Background - don't wait)
-        if (debugInfo.mode === "DRILL_SWEEP" && responseContent && baseEmbeddings[0]) {
+        // 4. PERSIST TO MEMORY (Background)
+        if (debugInfo.mode === "WORD_DRILL" && responseContent && baseEmbeddings[0]) {
             fetch(`${host}/api/v2/tenants/${tenant}/databases/${database}/collections/ChatMemory/upsert`, {
                 method: "POST",
                 headers: { "x-chroma-token": apiKey, "Content-Type": "application/json" },
@@ -172,7 +171,7 @@ ${contextString || "USE YOUR GENERAL TERMINOLOGY FOR CBC."}
 
         return NextResponse.json({
             role: "assistant",
-            content: responseContent + `\n\n[Mode: ${debugInfo.mode} | Scraps: ${debugInfo.depth} | Speed: ${debugInfo.time}ms]`
+            content: responseContent
         });
 
     } catch (error: any) {
