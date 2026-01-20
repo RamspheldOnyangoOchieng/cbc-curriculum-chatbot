@@ -7,8 +7,7 @@ from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import chromadb
-from chromadb.config import Settings
+import requests
 from sentence_transformers import SentenceTransformer
 import PyPDF2
 from dotenv import load_dotenv
@@ -30,28 +29,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- CHROMA CONNECTION ---
-def get_chroma_client():
-    host_url = os.getenv('CHROMA_HOST', 'https://api.trychroma.com')
-    api_key = os.getenv('CHROMA_API_KEY')
-    tenant = os.getenv('CHROMA_TENANT', 'default_tenant')
-    database = os.getenv('CHROMA_DATABASE', 'default_database')
-
-    if not api_key:
-        print("Warning: CHROMA_API_KEY not set. Using local mode if possible (unlikely for cloud).")
-
-    # Connect to Chroma Cloud
-    client = chromadb.HttpClient(
-        host=host_url.replace("https://", "").replace("http://", ""),
-        ssl=True,
-        tenant=tenant,
-        database=database,
-        headers={
-            "x-chroma-token": api_key,
+# --- CHROMA HTTP CLIENT ---
+class ChromaHTTPClient:
+    def __init__(self):
+        self.host = os.getenv('CHROMA_HOST', 'https://api.trychroma.com')
+        self.api_key = os.getenv('CHROMA_API_KEY')
+        self.tenant = os.getenv('CHROMA_TENANT', 'default_tenant')
+        self.database = os.getenv('CHROMA_DATABASE', 'default_database')
+        self.headers = {
+            "x-chroma-token": self.api_key,
             "Content-Type": "application/json"
         }
-    )
-    return client
+        self.base_url = f"{self.host}/api/v1"
+    
+    def upsert(self, collection_name: str, ids: List[str], embeddings: List[List[float]], 
+               documents: List[str], metadatas: List[dict]):
+        """Upsert documents to a collection"""
+        url = f"{self.base_url}/collections/{collection_name}/upsert"
+        payload = {
+            "ids": ids,
+            "embeddings": embeddings,
+            "documents": documents,
+            "metadatas": metadatas
+        }
+        response = requests.post(url, json=payload, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
 
 # --- MODEL LOADING ---
 # Load optimized embedding model
@@ -105,23 +108,24 @@ def process_and_index_file(file_path: str, filename: str):
         # 3. Embed
         embeddings = model.encode(chunks).tolist()
 
-        # 4. Upsert
-        client = get_chroma_client()
-        collection = client.get_or_create_collection(name="Curriculumnpdfs", metadata={"hnsw:space": "cosine"})
+        # 4. Upsert via HTTP
+        chroma_client = ChromaHTTPClient()
         
         ids = [f"cloud_{filename}_{i}" for i in range(len(chunks))]
         metadatas = [{"source": filename, "type": "cloud_upload"} for _ in range(len(chunks))]
         
-        collection.upsert(
+        chroma_client.upsert(
+            collection_name="Curriculumnpdfs",
             ids=ids,
-            documents=chunks,
             embeddings=embeddings,
+            documents=chunks,
             metadatas=metadatas
         )
         print(f"Successfully indexed {len(chunks)} chunks from {filename}")
         
     except Exception as e:
         print(f"Error processing {filename}: {e}")
+
 
 # --- API ENDPOINTS ---
 
@@ -180,21 +184,22 @@ async def ingest_text(data: dict):
         chunks = chunk_text(text)
         embeddings = model.encode(chunks).tolist()
         
-        client = get_chroma_client()
-        collection = client.get_or_create_collection(name="Curriculumnpdfs", metadata={"hnsw:space": "cosine"})
+        chroma_client = ChromaHTTPClient()
         
         ids = [f"cloud_text_{title}_{i}" for i in range(len(chunks))]
         metadatas = [{"source": title, "type": "cloud_text"} for _ in range(len(chunks))]
         
-        collection.upsert(
+        chroma_client.upsert(
+            collection_name="Curriculumnpdfs",
             ids=ids,
-            documents=chunks,
             embeddings=embeddings,
+            documents=chunks,
             metadatas=metadatas
         )
         return {"success": True, "indexed_chunks": len(chunks)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
