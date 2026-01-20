@@ -8,7 +8,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer (Removed to save memory)
 import PyPDF2
 from dotenv import load_dotenv
 
