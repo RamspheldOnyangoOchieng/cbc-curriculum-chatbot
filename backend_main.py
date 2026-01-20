@@ -36,10 +36,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- CHROMA HTTP CLIENT ---
+# --- CHROMA V2 HTTP CLIENT ---
 class ChromaHTTPClient:
     def __init__(self):
-        self.host = os.getenv('CHROMA_HOST', 'https://api.trychroma.com')
+        self.host = os.getenv('CHROMA_HOST', 'https://api.trychroma.com').rstrip('/')
         self.api_key = os.getenv('CHROMA_API_KEY')
         self.tenant = os.getenv('CHROMA_TENANT', 'default_tenant')
         self.database = os.getenv('CHROMA_DATABASE', 'default_database')
@@ -47,12 +47,26 @@ class ChromaHTTPClient:
             "x-chroma-token": self.api_key,
             "Content-Type": "application/json"
         }
-        self.base_url = f"{self.host}/api/v1"
+        self.base_url = f"{self.host}/api/v2/tenants/{self.tenant}/databases/{self.database}"
     
+    def get_collection_id(self, name: str):
+        """Get collection ID by name using v2 API"""
+        url = f"{self.base_url}/collections"
+        resp = requests.get(url, headers=self.headers)
+        resp.raise_for_status()
+        for coll in resp.json():
+            if coll['name'] == name:
+                return coll['id']
+        
+        # Create if not exists
+        create_resp = requests.post(url, headers=self.headers, json={"name": name})
+        create_resp.raise_for_status()
+        return create_resp.json()['id']
+
     def upsert(self, collection_name: str, ids: List[str], embeddings: List[List[float]], 
                documents: List[str], metadatas: List[dict]):
-        """Upsert documents to a collection"""
-        url = f"{self.base_url}/collections/{collection_name}/upsert"
+        coll_id = self.get_collection_id(collection_name)
+        url = f"{self.base_url}/collections/{coll_id}/upsert"
         payload = {
             "ids": ids,
             "embeddings": embeddings,
@@ -63,10 +77,11 @@ class ChromaHTTPClient:
         response.raise_for_status()
         return response.json()
 
-# --- EMBEDDING HELPER (HF API to save memory on Render) ---
+# --- EMBEDDING HELPER (Updated for stable Router support) ---
 def get_embeddings(texts: List[str]) -> List[List[float]]:
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
-    model_id = "sentence-transformers/all-MiniLM-L6-v2"
+    # Using BGE-Small which is more stable on the new HF router
+    model_id = "BAAI/bge-small-en-v1.5"
     api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
     headers = {"Authorization": f"Bearer {hf_token}"}
     
@@ -76,7 +91,6 @@ def get_embeddings(texts: List[str]) -> List[List[float]]:
         return response.json()
     except Exception as e:
         print(f"Embedding error: {e}")
-        # Fallback error handling
         raise HTTPException(status_code=500, detail=f"Embedding API failed: {str(e)}")
 
 # --- HELPERS ---
