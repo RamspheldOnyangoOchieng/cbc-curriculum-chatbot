@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def sync_v2_final():
+def sync_final():
     host = "https://api.trychroma.com"
     api_key = os.getenv('CHROMA_API_KEY')
     tenant = os.getenv('CHROMA_TENANT')
@@ -18,12 +18,13 @@ def sync_v2_final():
         "Content-Type": "application/json"
     }
 
+    # 1. Get Collection via v2 API
     base_url = f"{host}/api/v2/tenants/{tenant}/databases/{database}"
-    print(f"Checking collection on v2 API: {base_url}")
     
+    print(f"Syncing to Chroma Cloud v2...")
     resp = requests.get(f"{base_url}/collections", headers=headers)
     if resp.status_code != 200:
-        print(f"Error: {resp.status_code} - {resp.text}")
+        print(f"Error listing collections: {resp.status_code}")
         return
 
     collections = resp.json()
@@ -34,29 +35,31 @@ def sync_v2_final():
             break
     
     if not coll_id:
-        print("Creating collection on v2...")
+        print("Creating collection...")
         resp = requests.post(f"{base_url}/collections", headers=headers, json={"name": "Curriculumnpdfs"})
         coll_id = resp.json()['id']
 
-    # 2. Embed
+    # 2. Embed using the confirmed working endpoint
     content = """The Kenya Junior Secondary Education Assessment (KJSEA) is the national assessment replacing the KCPE. 
-    It is done at Grade 9. It contributes 40% to the final score, while 60% comes from school-based assessments.
-    Grade 10 reporting is January 12, 2026."""
+    Key facts about KJSEA:
+    - Replaces KCPE for Grade 9 students.
+    - Contributes 40% to the final score (Summative).
+    - 60% of the score comes from school-based assessments (SBAs).
+    - Grade 10 reporting date is January 12, 2026.
+    - It focuses on CBC competencies."""
     
-    print("Embedding question...")
-    # UPDATED URL: Using router.huggingface.co as requested by HF API
+    print("Embedding context...")
     e_resp = requests.post(
-        "https://router.huggingface.co/sentence-transformers/all-MiniLM-L6-v2",
+        "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2",
         headers={"Authorization": f"Bearer {hf_token}"},
         json={"inputs": [content], "options": {"wait_for_model": True}}
     )
     
-    e_data = e_resp.json()
-    if isinstance(e_data, list):
-        embedding = e_data[0]
-    else:
-        print(f"Embedding error: {e_data}")
+    if e_resp.status_code != 200:
+        print(f"Embedding failed: {e_resp.text}")
         return
+
+    embedding = e_resp.json()[0]
 
     # 3. Upsert
     print(f"Upserting to {coll_id}...")
@@ -64,17 +67,17 @@ def sync_v2_final():
         f"{base_url}/collections/{coll_id}/upsert",
         headers=headers,
         json={
-            "ids": ["manual_v2_kjsea"],
+            "ids": ["knowledge_kjsea"],
             "embeddings": [embedding],
             "documents": [content],
-            "metadatas": [{"source": "manual_v2"}]
+            "metadatas": [{"source": "manual_sync"}]
         }
     )
-    print(f"Result: {u_resp.status_code}")
+    
     if u_resp.status_code == 200:
-        print("✅ SUCCESS!")
+        print("✅ SUCCESS! Knowledge is now in Chroma Cloud.")
     else:
-        print(f"Upsert error: {u_resp.text}")
+        print(f"Upsert failed: {u_resp.text}")
 
 if __name__ == "__main__":
-    sync_v2_final()
+    sync_final()
