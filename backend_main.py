@@ -67,7 +67,7 @@ class ChromaHTTPClient:
 def get_embeddings(texts: List[str]) -> List[List[float]]:
     hf_token = os.getenv("HUGGINGFACE_TOKEN")
     model_id = "sentence-transformers/all-MiniLM-L6-v2"
-    api_url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_id}"
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {hf_token}"}
     
     try:
