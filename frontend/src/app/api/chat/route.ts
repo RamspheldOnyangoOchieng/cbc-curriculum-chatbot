@@ -20,26 +20,63 @@ const chroma = new ChromaClient({
 });
 
 
+// Helper to get embeddings from Hugging Face (matches backend)
+async function getQueryEmbedding(text: string) {
+    const hfToken = process.env.HUGGINGFACE_TOKEN;
+    if (!hfToken) {
+        console.error("Missing HUGGINGFACE_TOKEN in Vercel.");
+        return null;
+    }
+
+    try {
+        const response = await fetch(
+            "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${hfToken}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ inputs: [text], options: { wait_for_model: true } }),
+            }
+        );
+        const result = await response.json();
+        return result[0]; // Returns the embedding vector
+    } catch (err) {
+        console.error("Embedding failed:", err);
+        return null;
+    }
+}
+
 export async function POST(req: NextRequest) {
     try {
         const { messages } = await req.json();
         const userQuery = messages[messages.length - 1]?.content || "";
 
-        // 1. RAG: Fetch relevant context from ChromaDB
+        // 1. RAG: Fetch relevant context from ChromaCloud
         let context = "";
         try {
-            const collection = await chroma.getCollection({ name: "Curriculumnpdfs" });
-            const results = await collection.query({
-                queryTexts: [userQuery],
-                nResults: 2, // Fetch top 2 most relevant chunks
-            });
+            console.log("RAG: Embedding query...");
+            const queryEmbedding = await getQueryEmbedding(userQuery);
 
-            if (results.documents && results.documents[0]) {
-                const docs = results.documents[0].filter((doc): doc is string => doc !== null);
-                context = docs.join("\n\n---\n\n");
+            if (queryEmbedding) {
+                console.log("RAG: Searching Chroma Cloud...");
+                const collection = await chroma.getCollection({ name: "Curriculumnpdfs" });
+                const results = await collection.query({
+                    queryEmbeddings: [queryEmbedding], // Use the vector directly
+                    nResults: 2,
+                });
+
+                if (results.documents && results.documents[0]) {
+                    const docs = results.documents[0].filter((doc): doc is string => doc !== null);
+                    context = docs.join("\n\n---\n\n");
+                    console.log(`RAG: Found ${docs.length} context chunks.`);
+                }
+            } else {
+                console.warn("RAG: Skipping retrieval because embedding failed.");
             }
         } catch (ragError) {
-            console.warn("RAG retrieval failed (is ChromaDB running?), proceeding without context:", ragError);
+            console.warn("RAG retrieval failed:", ragError);
         }
 
         // 2. Construct Consolidated System Prompt
@@ -53,7 +90,7 @@ ${context ? context : "No specific documents found. Use your general knowledge a
         `.trim();
 
         const systemPrompt = {
-            role: "system" as const, // Type assertion for Groq SDK
+            role: "system" as const,
             content: systemPromptContent
         };
 
@@ -79,3 +116,4 @@ ${context ? context : "No specific documents found. Use your general knowledge a
         return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
     }
 }
+
