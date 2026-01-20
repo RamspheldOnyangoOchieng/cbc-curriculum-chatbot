@@ -56,10 +56,21 @@ class ChromaHTTPClient:
         response.raise_for_status()
         return response.json()
 
-# --- MODEL LOADING ---
-# Load optimized embedding model
-print("Loading embedding model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# --- EMBEDDING HELPER (HF API to save memory on Render) ---
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    hf_token = os.getenv("HUGGINGFACE_TOKEN")
+    model_id = "sentence-transformers/all-MiniLM-L6-v2"
+    api_url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_id}"
+    headers = {"Authorization": f"Bearer {hf_token}"}
+    
+    try:
+        response = requests.post(api_url, headers=headers, json={"inputs": texts, "options": {"wait_for_model": True}})
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        # Fallback error handling
+        raise HTTPException(status_code=500, detail=f"Embedding API failed: {str(e)}")
 
 # --- HELPERS ---
 def extract_text_from_pdf(file_path: str) -> str:
@@ -105,8 +116,8 @@ def process_and_index_file(file_path: str, filename: str):
         if not chunks:
             return
 
-        # 3. Embed
-        embeddings = model.encode(chunks).tolist()
+        # 3. Embed (Using HF API)
+        embeddings = get_embeddings(chunks)
 
         # 4. Upsert via HTTP
         chroma_client = ChromaHTTPClient()
@@ -182,7 +193,7 @@ async def ingest_text(data: dict):
     # Process
     try:
         chunks = chunk_text(text)
-        embeddings = model.encode(chunks).tolist()
+        embeddings = get_embeddings(chunks)
         
         chroma_client = ChromaHTTPClient()
         

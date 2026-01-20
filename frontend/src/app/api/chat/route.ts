@@ -7,10 +7,18 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
 });
 
-// Initialize Chroma Client with env vars or default
+// Initialize Chroma Client with cloud authentication support
 const chroma = new ChromaClient({
     path: process.env.CHROMA_HOST || "http://localhost:8000",
+    auth: process.env.CHROMA_API_KEY ? {
+        provider: "token",
+        token: process.env.CHROMA_API_KEY,
+        header: "x-chroma-token"
+    } : undefined,
+    tenant: process.env.CHROMA_TENANT || "default_tenant",
+    database: process.env.CHROMA_DATABASE || "default_database",
 });
+
 
 export async function POST(req: NextRequest) {
     try {

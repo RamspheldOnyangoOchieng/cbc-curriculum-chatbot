@@ -26,14 +26,14 @@ We will use **Render.com** (it has a free tier for Python web services).
     *   **Name**: `cbc-chatbot-backend` (or similar)
     *   **Root Directory**: `.` (leave empty, it defaults to root)
     *   **Runtime**: `Python 3`
-    *   **Build Command**: `pip install -r requirements-backend.txt`
+    *   **Build Command**: `python -m pip install --upgrade pip && pip install --prefer-binary -r requirements-backend.txt`
     *   **Start Command**: `uvicorn backend_main:app --host 0.0.0.0 --port $PORT`
 5.  **Environment Variables** (Add these in the Render Dashboard):
     *   `CHROMA_HOST`: `https://api.trychroma.com`
     *   `CHROMA_API_KEY`: *(Your Chroma API Key)*
     *   `CHROMA_TENANT`: *(Your Tenant ID)*
     *   `CHROMA_DATABASE`: *(Your Database Name)*
-    *   `PYTHON_VERSION`: `3.9.0` (Recommended)
+    *   `PYTHON_VERSION`: `3.10.0` (Updated for better library support)
 6.  Click **Deploy Web Service**.
 7.  **Wait** for deployment to finish.
 8.  **Copy the Service URL** (e.g., `https://cbc-chatbot-backend.onrender.com`). You will need this for the Frontend.

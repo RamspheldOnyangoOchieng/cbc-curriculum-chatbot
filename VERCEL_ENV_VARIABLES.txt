@@ -1,18 +1,20 @@
-# Environment Variables for Vercel Deployment
-# Copy these to Vercel Dashboard → Settings → Environment Variables
+# 🚀 Environment Variables for Vercel Deployment
+# Copy these values into your Vercel Dashboard manually.
+# DO NOT COMMIT THE ACTUAL KEYS TO GITHUB.
 
+# --- GROQ (AI Engine) ---
+GROQ_API_KEY=your_groq_api_key_here
 
+# --- CHROMA CLOUD (Knowledge Database) ---
+CHROMA_HOST=your_chroma_host_url
+CHROMA_API_KEY=your_chroma_api_key
+CHROMA_TENANT=your_tenant_id
+CHROMA_DATABASE=your_database_name
+
+# --- BACKEND (File Ingestion) ---
+PYTHON_BACKEND_URL=your_render_backend_url
 
 # Instructions:
-# 1. Go to vercel.com and select your project
-# 2. Navigate to Settings → Environment Variables
-# 3. Add each variable above (one at a time)
-# 4. Select all environments: Production, Preview, Development
-# 5. Click "Save"
-# 6. Redeploy your project
-
-# Project Settings:
-# - Root Directory: frontend
-# - Framework Preset: Next.js (auto-detected)
-# - Build Command: (leave default)
-# - Output Directory: (leave default)
+# 1. Add these variables in Vercel (Next.js project settings).
+# 2. Add HUGGINGFACE_TOKEN, CHROMA_HOST, CHROMA_API_KEY to Render Environment Variables.
+# 3. Use your .env file locally for the actual values.
