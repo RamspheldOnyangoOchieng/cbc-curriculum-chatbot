@@ -20,6 +20,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
 app = FastAPI(title="CBC Chatbot Admin API")
 
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 Backend is starting up...")
+    print(f"CHROMA_HOST: {os.getenv('CHROMA_HOST')}")
+    if not os.getenv("HUGGINGFACE_TOKEN"):
+        print("⚠️ WARNING: HUGGINGFACE_TOKEN is not set!")
+
 # Allow CORS (adjust origins for production)
 app.add_middleware(
     CORSMiddleware,
@@ -142,6 +149,7 @@ def process_and_index_file(file_path: str, filename: str):
 
 @app.get("/")
 def health_check():
+    print("✅ Health check hit!")
     return {"status": "ok", "service": "CBC Chatbot Backend"}
 
 @app.post("/ingest")
