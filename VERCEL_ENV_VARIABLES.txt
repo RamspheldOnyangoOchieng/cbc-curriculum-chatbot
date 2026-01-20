@@ -1,0 +1,18 @@
+# Environment Variables for Vercel Deployment
+# Copy these to Vercel Dashboard → Settings → Environment Variables
+
+
+
+# Instructions:
+# 1. Go to vercel.com and select your project
+# 2. Navigate to Settings → Environment Variables
+# 3. Add each variable above (one at a time)
+# 4. Select all environments: Production, Preview, Development
+# 5. Click "Save"
+# 6. Redeploy your project
+
+# Project Settings:
+# - Root Directory: frontend
+# - Framework Preset: Next.js (auto-detected)
+# - Build Command: (leave default)
+# - Output Directory: (leave default)
