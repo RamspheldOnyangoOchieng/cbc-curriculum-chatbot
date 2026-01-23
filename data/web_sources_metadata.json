@@ -1,0 +1,103 @@
+{
+  "sources": {
+    "669c3bda8c47": {
+      "url": "https://www.kenyans.co.ke/news/119387-education-ministry-rejects-60000-student-transfer-requests-over-school-capacity",
+      "type": "article",
+      "processed": true,
+      "output_file": "data\\processed\\119387_education_ministry_rejects_60000_student_transfer_requests_over_school_ca.txt",
+      "harvested_at": "2026-01-23T13:00:08.339472"
+    },
+    "a6eaa87e33ea": {
+      "url": "https://share.google/ysiS84EjNPpW9qtVr",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "5124d600dd0d": {
+      "url": "https://share.google/PcEId2FS9sTjhEd1s",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "a3e30d919cc3": {
+      "url": "https://share.google/Y3oFHuGLKN7ILbzDj",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "d39fe455bb79": {
+      "url": "https://share.google/RPxQqmVWwcAPWyqoF",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "b7da4bbbbe79": {
+      "url": "https://share.google/lhWOkHDjYvXnGCDjd",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\lhWOkHDjYvXnGCDjd.txt",
+      "harvested_at": "2026-01-23T13:00:29.356899"
+    },
+    "64d4769a6eb8": {
+      "url": "https://share.google/Zqi2vKPgrN8LBpTNX",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\Zqi2vKPgrN8LBpTNX.txt",
+      "harvested_at": "2026-01-23T13:00:36.208212"
+    },
+    "8d5f5d492a13": {
+      "url": "https://share.google/rUIoMFwWPM5GDhvLt",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "d3ac86ff4fa6": {
+      "url": "https://share.google/I84rzVCWqx1FncR9O",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\I84rzVCWqx1FncR9O.txt",
+      "harvested_at": "2026-01-23T13:00:52.299508"
+    },
+    "022f8b473235": {
+      "url": "https://share.google/qM3bMUxegFZoVWFQ9",
+      "type": "google_share",
+      "processed": false,
+      "needs_browser": true
+    },
+    "01e54073d8c4": {
+      "url": "https://share.google/zMKYKGMhqWTFaHbF9",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\zMKYKGMhqWTFaHbF9.txt",
+      "harvested_at": "2026-01-23T13:00:58.238766"
+    },
+    "add32451141e": {
+      "url": "https://m.facebook.com/story.php?story_fbid=pfbid0k9NCbgaQ81DTykYDUr1PqT4UVvjwnJ2LjemEVwLYx8VzXTW2y4LKUG9zHuFrT6X4l&id=100004655256269",
+      "type": "facebook",
+      "processed": false,
+      "needs_browser": true
+    },
+    "061bee7f270d": {
+      "url": "https://share.google/Mw1saVG0j0sgD27fO",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\Mw1saVG0j0sgD27fO.txt",
+      "harvested_at": "2026-01-23T13:09:59.219985"
+    },
+    "525973ac4ea9": {
+      "url": "https://share.google/tApOoaRWB5ecNXADM",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\tApOoaRWB5ecNXADM.txt",
+      "harvested_at": "2026-01-23T13:10:04.885711"
+    },
+    "37eb23d1bb4f": {
+      "url": "https://share.google/Hpk3J1RZPmm595Iym",
+      "type": "google_share",
+      "processed": true,
+      "output_file": "data\\processed\\Hpk3J1RZPmm595Iym.txt",
+      "harvested_at": "2026-01-23T13:10:12.796781"
+    }
+  },
+  "last_updated": "2026-01-23T13:10:18.731901"
+}

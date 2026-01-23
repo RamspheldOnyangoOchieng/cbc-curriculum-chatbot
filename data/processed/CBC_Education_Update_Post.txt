@@ -1,0 +1,28 @@
+Title: CBC Education Update Post
+Source URL: https://m.facebook.com/story.php?story_fbid=pfbid0k9NCbgaQ81DTykYDUr1PqT4UVvjwnJ2LjemEVwLYx8VzXTW2y4LKUG9zHuFrT6X4l&id=100004655256269
+Final URL: https://www.facebook.com/story.php?story_fbid=pfbid0k9NCbgaQ81DTykYDUr1PqT4UVvjwnJ2LjemEVwLYx8VzXTW2y4LKUG9zHuFrT6X4l&id=100004655256269&_rdr
+Harvested: 2026-01-23T13:18:52.095784
+Method: playwright_browser
+---
+
+CBE Part 41
+Core Math or Essential Math in Senior School: What is the difference?
+In Grade 10, math is a choice. You either take core math to solve for the ever elusive X or you take essential math to calculate your taxes. Either way, best not to leave it to chance.
+Math is no longer just math and parents need to find out whether the math their child is doing in SS will math later in life.
+The choice between core mathematics and essential mathematics is one of the most critical decisions a student makes when entering Grade 10 because its going to have a significant effect on the choice of pathways later in tertiary education after Grade 12.
+Both  the core and essential math are compulsory but they serve very different future goals.
+A) What does core mathematics entail?
+It's compulsory in the STEM track.
+Its the heavy lifting needed for science &  technical fields.
+It delves deep into math concepts. It's basically the Math done in 8.4.4 in secondary school.
+Its aim is to prepare learners for courses in fields like  medicine, engineering, architecture, computer science, and pure sciences at all levels.
+Core Math requires a strong foundation from JS.
+B) What does essential math entail?
+This is the utilitarian pack that targets learners in Social Sciences and the arts & sport science pathways.
+It emphasizes financial literacy, statistics, and spatial reasoning etc
+Instead of complex theorems, it focuses on commercial arithmetic eg business math,  data interpretation eg for research and journalism and practical geometry eg in  design.
+The aim of Essential Math is to provide the learner with  mathematical survival skills needed for careers in law, business management, journalism, social work, and the arts.
+It has a practical approach and it's intended to  be highly relevant to daily life.
+Way forward:
+Some learners are undecided on choice of pathway and future careers.
+For such learners, it's better to go the core Mathematics way, thus the STEM track.
