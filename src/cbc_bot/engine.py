@@ -1,14 +1,15 @@
 import os
 import requests
 import time
+import re
 from .config import Config
 from .retriever import CBCRetriever
 from .knowledge import KnowledgeBase
 
 class CBCEngine:
     """
-    MASTER ENGINE (v5.6): STRICT KNOWLEDGE MODE.
-    Forced to use provided fragments or admit lack of data.
+    MASTER AI ENGINE (v5.7): Social Intelligence Edition.
+    Handles greetings naturally while remaining strict on factual data.
     """
     MODELSLAB_URL = "https://modelslab.com/api/v7/llm/chat/completions"
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -18,28 +19,40 @@ class CBCEngine:
         self.groq_key = os.getenv("GROQ_API_KEY")
         self.retriever = CBCRetriever()
 
+    def is_greeting(self, text: str) -> bool:
+        """Detects if the message is just a greeting/small talk."""
+        greetings = {r'\bhi\b', r'\bhello\b', r'\bhey\b', r'\bhabari\b', r'\bjambo\b', r'\bsasa\b'}
+        text = text.lower().strip()
+        # Remove punctuation for check
+        clean_text = re.sub(r'[?.!,]', '', text)
+        return any(re.search(pattern, clean_text) for pattern in greetings) or len(clean_text.split()) <= 2
+
     def get_chat_response(self, messages: list) -> str:
         user_query = messages[-1].get("content", "")
-        context = self.retriever.find_relevant_context(user_query, n_results=12)
-
-        # STRICT SYSTEM PROMPT
-        system_prompt = f"""
+        
+        # 1. Handle Simple Greetings Instantly
+        if self.is_greeting(user_query):
+            system_prompt = "You are a friendly CBC Assistant. The user just said hello. Respond warmly, briefly (max 1 sentence), and stay in character. Do not list categories."
+            context = ""
+        else:
+            # 2. Perform Deep Search for actual questions
+            context = self.retriever.find_relevant_context(user_query, n_results=12)
+            system_prompt = f"""
 {KnowledgeBase.get_system_prompt()}
 
 ---
-DATABASE KNOWLEDGE (THE ONLY TRUTH):
+DATABASE KNOWLEDGE:
 {context or "DATABASE IS EMPTY FOR THIS TOPIC."}
 ---
 
 STRICT RULES:
-1. YOU ARE A ROBOT THAT ONLY SPEAKS USING THE 'DATABASE KNOWLEDGE' ABOVE.
-2. DO NOT USE YOUR OWN GENERAL KNOWLEDGE TO INVENT NATIONAL STATISTICS.
-3. IF THE DATABASE DOES NOT MENTION THE NUMBERS ASKED (E.G. THE MATH OF PLACEMENT), SAY: "My current database fragments do not contain the specific figures for this. I only have data on [X, Y, Z from context]."
-4. IF YOU SEE A 'CRISIS' OR 'DESIGN FLAW' MENTIONED IN THE DATABASE, EXPLORE IT DEEPLY.
-5. ALWAYS CITE YOUR SOURCES (e.g. "According to the Kenya Times opinion piece...")
+1. USE THE DATABASE ABOVE FOR ALL FACTS. 
+2. BE CONCISE. If the answer is 2 sentences, don't write 5.
+3. If numbers or crisis details are missing, admit it. 
+4. Always mention your source (e.g., 'Per the Kenya Times piece...').
 """.strip()
 
-        # SPEED-FIRST FALLBACK
+        # 3. SPEED-FIRST PROVIDER HIERARCHY
         providers = [
             {"name": "Gemini-2.0-Flash", "model": "gemini-2.0-flash-001", "type": "modelslab"},
             {"name": "Claude-3.5-Sonnet", "model": "claude-3.5-sonnet", "type": "modelslab"},
@@ -55,17 +68,17 @@ STRICT RULES:
                     resp = requests.post(self.MODELSLAB_URL, json={
                         "key": key, "model_id": p["model"], 
                         "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temp": 0.05 # Near-zero for total factual accuracy
-                    }, timeout=35)
+                        "temp": 0.2
+                    }, timeout=30)
                 else:
                     resp = requests.post(self.GROQ_URL, headers={"Authorization": f"Bearer {key}"}, json={
                         "model": p["model"], "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temperature": 0.05
-                    }, timeout=20)
+                        "temperature": 0.2
+                    }, timeout=15)
 
                 if resp.status_code == 200:
                     data = resp.json()
                     return data.get("choices", [{}])[0].get("message", {}).get("content") or data.get("output") or data.get("message")
             except: continue
 
-        return "Connection Error with CBC Intelligence Engines."
+        return "Habari! I'm having a slight connection issue. How can I help you with CBC?"
