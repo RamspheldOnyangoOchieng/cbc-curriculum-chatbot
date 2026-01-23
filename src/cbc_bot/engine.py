@@ -8,13 +8,12 @@ from .knowledge import KnowledgeBase
 
 class CBCEngine:
     """
-    MASTER AI ENGINE (v4.0): Multi-Provider Robust Synthesis.
-    Implements a hierarchy of providers for 100% uptime and logic depth.
-    Priority: 
-    1. ModelsLab (Gemini 2.0 Flash)
-    2. ModelsLab (Claude 3.5 Sonnet)
-    3. ModelsLab (Gemini 2.5 Pro)
-    4. Groq (Llama 3.3 70B)
+    MASTER AI ENGINE (v5.0): Lightning Reasoning Edition.
+    Prioritizes ultra-fast 'Flash' models that support deep reasoning.
+    Priority:
+    1. Gemini 2.0 Flash (Lightning Speed + Deep Reasoning)
+    2. Claude 3.5 Sonnet (Elite Reasoning - Fallback if Gemini is slow)
+    3. Groq Llama 3.3 (Extreme Speed Fallback)
     """
     MODELSLAB_URL = "https://modelslab.com/api/v7/llm/chat/completions"
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -25,93 +24,73 @@ class CBCEngine:
         self.retriever = CBCRetriever()
 
     def get_chat_response(self, messages: list) -> str:
-        # 1. Get the latest user query
         user_query = messages[-1].get("content", "")
         
-        # 2. PERFORM DEEP DRILL SEARCH
+        # 1. OPTIMIZED DEEP DRILL (Fast Batch Search)
         context = ""
         if user_query:
             try:
+                # Still using 10 results for depth, but retrieved via parallel batch
                 context = self.retriever.find_relevant_context(user_query, n_results=10)
             except Exception as e:
-                print(f"Deep Drill Error: {e}")
+                print(f"Retrieval Error: {e}")
 
-        # 3. CONSTRUCT SYSTEM PROMPT
+        # 2. CONCISE REASONING PROMPT (For Speed)
+        # We use a focused 'Flash' prompt that triggers reasoning without verbosity.
         system_prompt = f"""
 {KnowledgeBase.get_system_prompt()}
 
 ---
-CBC KNOWLEDGE BASE FRAGMENTS (VERIFIED DATA):
-{context or "NO DIRECT FRAGMENTS FOUND. Use established CBC transition guidelines."}
+CBC DATABASE FRAGMENTS:
+{context or "NO DIRECT FRAGMENTS FOUND."}
 ---
 
-INSTRUCTIONS:
-- You are a CBC Master Consultant.
-- Use the fragments above to provide specific, data-driven answers.
-- If data is missing, admit it politely but provide the best general advice based on KICD standards.
+INSTRUCTION: 
+Reason through the fragments and the user question. Connect related data points instantly. 
+Provide a definitive, expert answer. Be concise but logically thorough.
+If the database contains the answer, prioritize that over general knowledge.
 """.strip()
 
-        # 4. FALLBACK LOGIC
-        # We try providers in sequence until one succeeds
+        # 3. SPEED-FIRST PROVIDER HIERARCHY
         providers = [
-            {"name": "ModelsLab-Gemini-2.0", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "gemini-2.0-flash-001", "type": "modelslab"},
-            {"name": "ModelsLab-Claude-3.5", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "claude-3.5-sonnet", "type": "modelslab"},
-            {"name": "ModelsLab-Gemini-2.5-Pro", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "gemini-2.5-pro", "type": "modelslab"},
-            {"name": "Groq-Llama-70B", "url": self.GROQ_URL, "key": self.groq_key, "model": "llama-3.3-70b-versatile", "type": "groq"}
+            # Gemini 2.0 Flash is the sweet spot: Sub-second response + strong reasoning
+            {"name": "Gemini-2.0-Flash", "model": "gemini-2.0-flash-001", "type": "modelslab"},
+            {"name": "Claude-3.5-Sonnet", "model": "claude-3.5-sonnet", "type": "modelslab"},
+            {"name": "Groq-Llama-70B", "model": "llama-3.3-70b-versatile", "type": "groq"}
         ]
 
         last_error = ""
-
         for provider in providers:
-            if not provider["key"] or provider["key"] == "your_modelslab_key_here":
-                print(f"Skipping {provider['name']}: API Key missing.")
-                continue
+            p_key = self.groq_key if provider.get("type") == "groq" else self.modelslab_key
+            if not p_key or p_key == "your_modelslab_key_here": continue
 
-            print(f"Attempting synthesis with {provider['name']}...")
-            
             try:
-                if provider["type"] == "modelslab":
-                    payload = {
-                        "key": provider["key"],
-                        "model_id": provider["model"],
-                        "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temp": 0.2, # ModelsLab parameter for temperature
-                        "max_tokens": 1500
-                    }
-                    resp = requests.post(provider["url"], json=payload, timeout=40)
-                else:
-                    # Groq OpenAI-compatible format
-                    headers = {
-                        "Authorization": f"Bearer {provider['key']}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
+                start_time = time.time()
+                if provider.get("type") == "groq":
+                    resp = requests.post(self.GROQ_URL, headers={"Authorization": f"Bearer {p_key}"}, json={
                         "model": provider["model"],
                         "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temperature": 0.2,
+                        "temperature": 0.1,
+                    }, timeout=20)
+                else:
+                    resp = requests.post(self.MODELSLAB_URL, json={
+                        "key": p_key,
+                        "model_id": provider["model"],
+                        "messages": [{"role": "system", "content": system_prompt}] + messages,
+                        "temp": 0.1,
                         "max_tokens": 1500
-                    }
-                    resp = requests.post(provider["url"], headers=headers, json=payload, timeout=30)
+                    }, timeout=30)
 
                 if resp.status_code == 200:
+                    elapsed = time.time() - start_time
+                    print(f"✅ Response from {provider['name']} in {elapsed:.2f}s")
                     data = resp.json()
-                    # Unified parsing: ModelsLab usually mirrors OpenAI or has a 'choices' array
-                    # Note: ModelsLab v7 structure might be slightly different, we check both
-                    if "choices" in data:
-                        return data["choices"][0]["message"]["content"]
-                    elif "output" in data:
-                        return data["output"]
-                    elif "message" in data:
-                        return data["message"]
-                    else:
-                        print(f"Unknown response format from {provider['name']}: {data}")
-                        continue
-                else:
-                    last_error = f"{provider['name']} Error {resp.status_code}: {resp.text}"
-                    print(last_error)
-
+                    res_content = data.get("choices", [{}])[0].get("message", {}).get("content") or data.get("output") or data.get("message")
+                    if res_content: return res_content
+                
+                print(f"⚠️ {provider['name']} slow/failed ({resp.status_code}). Trying next...")
             except Exception as e:
-                print(f"Error calling {provider['name']}: {e}")
+                print(f"❌ {provider['name']} error: {e}")
                 last_error = str(e)
 
-        return f"All AI providers are currently unavailable. Most recent error: {last_error}"
+        return f"CBC Engine Timeout. Error: {last_error}"
