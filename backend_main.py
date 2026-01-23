@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import PyPDF2
+import trafilatura
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -189,6 +190,85 @@ def process_and_cleanup(tmp_path: str, filename: str):
         process_and_index_file(tmp_path, filename)
     finally:
         if os.path.exists(tmp_path): os.remove(tmp_path)
+
+@app.post("/ingest-url")
+async def ingest_url(data: dict, background_tasks: BackgroundTasks = None):
+    """
+    Scrape a URL and index its content.
+    Expects json: {"url": "https://example.com"}
+    """
+    url = data.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="No URL provided")
+        
+    if background_tasks:
+        background_tasks.add_task(process_url, url)
+    else:
+        process_url(url)
+        
+    return {"success": True, "message": f"URL {url} queued for scraping and indexing."}
+
+def process_url(url: str):
+    try:
+        print(f"Scraping URL: {url}")
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            print(f"Failed to fetch URL: {url}")
+            return
+            
+        content = trafilatura.extract(downloaded, include_comments=False, include_tables=True)
+        if not content:
+            print(f"Failed to extract content from: {url}")
+            return
+            
+        # Aligned Chunking and Indexing
+        chunks = chunk_text(content)
+        embeddings = get_embeddings(chunks)
+        
+        chroma_client = ChromaHTTPClient()
+        # Use safe characters for IDs
+        safe_url = "".join([c if c.isalnum() else "_" for c in url])[:100]
+        ids = [f"url_{safe_url}_{i}" for i in range(len(chunks))]
+        metadatas = [{"source": url, "type": "url_ingest"} for _ in range(len(chunks))]
+        
+        chroma_client.upsert("Curriculumnpdfs", ids, embeddings, chunks, metadatas)
+        print(f"Successfully indexed {len(chunks)} chunks from URL: {url}")
+        
+    except Exception as e:
+        print(f"Error processing URL {url}: {e}")
+
+@app.post("/ingest-text")
+async def ingest_text(data: dict):
+    """
+    Ingest raw text (e.g. from copy-paste).
+    Expects json: {"title": "foo", "text": "bar"}
+    """
+    title = data.get("title", "Untitled")
+    text = data.get("text", "")
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="No text provided")
+        
+    # Process
+    try:
+        chunks = chunk_text(text)
+        embeddings = get_embeddings(chunks)
+        
+        chroma_client = ChromaHTTPClient()
+        
+        ids = [f"cloud_text_{title}_{i}" for i in range(len(chunks))]
+        metadatas = [{"source": title, "type": "cloud_text"} for _ in range(len(chunks))]
+        
+        chroma_client.upsert(
+            collection_name="Curriculumnpdfs",
+            ids=ids,
+            embeddings=embeddings,
+            documents=chunks,
+            metadatas=metadatas
+        )
+        return {"success": True, "indexed_chunks": len(chunks)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

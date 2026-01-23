@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Upload, FileText, Database, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, FileText, Database, CheckCircle, AlertCircle, Loader2, Link as LinkIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function KnowledgePage() {
-    const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
+    const [activeTab, setActiveTab] = useState<"upload" | "paste" | "link">("upload");
     const [file, setFile] = useState<File | null>(null);
     const [textTitle, setTextTitle] = useState("");
     const [textContent, setTextContent] = useState("");
+    const [url, setUrl] = useState("");
     const [status, setStatus] = useState<"idle" | "uploading" | "retraining" | "success" | "error">("idle");
     const [logs, setLogs] = useState<string>("");
 
@@ -30,6 +31,8 @@ export default function KnowledgePage() {
             } else if (activeTab === "paste" && textContent && textTitle) {
                 formData.append("text", textContent);
                 formData.append("title", textTitle);
+            } else if (activeTab === "link" && url) {
+                formData.append("url", url);
             } else {
                 throw new Error("Please provide valid input.");
             }
@@ -82,20 +85,27 @@ export default function KnowledgePage() {
                     {/* Input Section */}
                     <div className="lg:col-span-2 space-y-6">
                         <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-1">
-                            <div className="grid grid-cols-2 gap-1 mb-6">
+                            <div className="grid grid-cols-3 gap-1 mb-6">
                                 <button
                                     onClick={() => setActiveTab("upload")}
                                     className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === "upload" ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
                                         }`}
                                 >
-                                    <Upload className="w-4 h-4" /> Upload PDF
+                                    <Upload className="w-4 h-4" /> PDF
                                 </button>
                                 <button
                                     onClick={() => setActiveTab("paste")}
                                     className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === "paste" ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
                                         }`}
                                 >
-                                    <FileText className="w-4 h-4" /> Paste Text
+                                    <FileText className="w-4 h-4" /> Text
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("link")}
+                                    className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === "link" ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
+                                        }`}
+                                >
+                                    <LinkIcon className="w-4 h-4" /> Link
                                 </button>
                             </div>
 
@@ -119,7 +129,7 @@ export default function KnowledgePage() {
                                             </div>
                                         </label>
                                     </div>
-                                ) : (
+                                ) : activeTab === "paste" ? (
                                     <div className="space-y-4">
                                         <input
                                             type="text"
@@ -134,6 +144,20 @@ export default function KnowledgePage() {
                                             onChange={(e) => setTextContent(e.target.value)}
                                             className="w-full h-64 bg-zinc-950 border border-zinc-800 rounded-xl p-4 focus:outline-none focus:border-red-500/50 transition-all resize-none"
                                         />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <input
+                                            type="url"
+                                            placeholder="Paste URL (e.g., https://thekenyatimes.com/...)"
+                                            value={url}
+                                            onChange={(e) => setUrl(e.target.value)}
+                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 focus:outline-none focus:border-red-500/50 transition-all"
+                                        />
+                                        <div className="p-8 bg-zinc-800/20 border border-dashed border-zinc-800 rounded-xl text-center">
+                                            <LinkIcon className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
+                                            <p className="text-sm text-zinc-500">The system will deeply scrape this URL and add it to the knowledge base.</p>
+                                        </div>
                                     </div>
                                 )}
 

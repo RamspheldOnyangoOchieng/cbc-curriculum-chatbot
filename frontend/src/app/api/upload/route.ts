@@ -44,6 +44,24 @@ export async function POST(req: NextRequest) {
 
             const data = await response.json();
             return NextResponse.json({ success: true, message: "Text content ingested successfully.", type: 'text' });
+        } else if (formData.get("url")) {
+            const url = formData.get("url") as string;
+            // Forward Request to Python Backend /ingest-url
+            const response = await fetch(`${backendUrl}/ingest-url`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ url })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Backend Error: ${errorText}`);
+            }
+
+            const data = await response.json();
+            return NextResponse.json({ success: true, message: data.message, type: 'url' });
         }
 
         return NextResponse.json({ error: "No valid data provided" }, { status: 400 });
