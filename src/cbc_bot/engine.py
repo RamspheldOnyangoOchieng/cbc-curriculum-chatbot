@@ -1,73 +1,117 @@
 import os
 import requests
 import json
+import time
 from .config import Config
 from .retriever import CBCRetriever
 from .knowledge import KnowledgeBase
 
 class CBCEngine:
     """
-    MASTER AI ENGINE (v3.0): Orchestrates the 'Word-by-Word' Deep Drill search.
-    Designed for precision, speed, and comprehensive content retrieval.
+    MASTER AI ENGINE (v4.0): Multi-Provider Robust Synthesis.
+    Implements a hierarchy of providers for 100% uptime and logic depth.
+    Priority: 
+    1. ModelsLab (Gemini 2.0 Flash)
+    2. ModelsLab (Claude 3.5 Sonnet)
+    3. ModelsLab (Gemini 2.5 Pro)
+    4. Groq (Llama 3.3 70B)
     """
+    MODELSLAB_URL = "https://modelslab.com/api/v7/llm/chat/completions"
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
     def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY")
+        self.modelslab_key = os.getenv("MODELSLAB_API_KEY")
+        self.groq_key = os.getenv("GROQ_API_KEY")
         self.retriever = CBCRetriever()
 
     def get_chat_response(self, messages: list) -> str:
-        """
-        Executes the Deep Drill retrieval and synthesizes the final response.
-        """
         # 1. Get the latest user query
         user_query = messages[-1].get("content", "")
         
-        # 2. PERFORM DEEP DRILL
-        # This will now automatically handle keyword extraction and parallel search
+        # 2. PERFORM DEEP DRILL SEARCH
         context = ""
         if user_query:
             try:
-                # We fetch a larger breadth of fragments (n_results=10) 
-                # because our Word-by-Word algorithm is now much faster.
                 context = self.retriever.find_relevant_context(user_query, n_results=10)
             except Exception as e:
                 print(f"Deep Drill Error: {e}")
 
-        # 3. MASTER PROMPT SYNTHESIS
-        # We tell the model exactly what it's looking at to improve reasoning.
+        # 3. CONSTRUCT SYSTEM PROMPT
         system_prompt = f"""
 {KnowledgeBase.get_system_prompt()}
 
 ---
-DATABASE DRILL RESULTS (DEEP SEARCH):
-The following fragments have been retrieved from the CBC Knowledge Base using a Word-by-Word Deep Drill algorithm. 
-Identify related facts across different fragments and synthesize them into a coherent, expert response.
-
-RETRIEVED DATA:
-{context or "NO DIRECT FRAGMENTS FOUND. Answer using general CBC expert knowledge."}
+CBC KNOWLEDGE BASE FRAGMENTS (VERIFIED DATA):
+{context or "NO DIRECT FRAGMENTS FOUND. Use established CBC transition guidelines."}
 ---
+
+INSTRUCTIONS:
+- You are a CBC Master Consultant.
+- Use the fragments above to provide specific, data-driven answers.
+- If data is missing, admit it politely but provide the best general advice based on KICD standards.
 """.strip()
-        
-        # 4. EXECUTE SYNTHESIS (Llama 3.3 70B)
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [{"role": "system", "content": system_prompt}] + messages,
-            "temperature": 0.2, # Lower temperature = higher factual reliability
-            "max_tokens": 1500,
-            "top_p": 0.9
-        }
-        
-        try:
-            resp = requests.post(self.GROQ_URL, headers=headers, json=payload, timeout=45)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"Groq Synthesis Error: {e}")
-            return "I apologize, but I encountered a network error while synthesizing the multi-drill results. Please try again."
+
+        # 4. FALLBACK LOGIC
+        # We try providers in sequence until one succeeds
+        providers = [
+            {"name": "ModelsLab-Gemini-2.0", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "gemini-2.0-flash-001", "type": "modelslab"},
+            {"name": "ModelsLab-Claude-3.5", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "claude-3.5-sonnet", "type": "modelslab"},
+            {"name": "ModelsLab-Gemini-2.5-Pro", "url": self.MODELSLAB_URL, "key": self.modelslab_key, "model": "gemini-2.5-pro", "type": "modelslab"},
+            {"name": "Groq-Llama-70B", "url": self.GROQ_URL, "key": self.groq_key, "model": "llama-3.3-70b-versatile", "type": "groq"}
+        ]
+
+        last_error = ""
+
+        for provider in providers:
+            if not provider["key"] or provider["key"] == "your_modelslab_key_here":
+                print(f"Skipping {provider['name']}: API Key missing.")
+                continue
+
+            print(f"Attempting synthesis with {provider['name']}...")
+            
+            try:
+                if provider["type"] == "modelslab":
+                    payload = {
+                        "key": provider["key"],
+                        "model_id": provider["model"],
+                        "messages": [{"role": "system", "content": system_prompt}] + messages,
+                        "temp": 0.2, # ModelsLab parameter for temperature
+                        "max_tokens": 1500
+                    }
+                    resp = requests.post(provider["url"], json=payload, timeout=40)
+                else:
+                    # Groq OpenAI-compatible format
+                    headers = {
+                        "Authorization": f"Bearer {provider['key']}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": provider["model"],
+                        "messages": [{"role": "system", "content": system_prompt}] + messages,
+                        "temperature": 0.2,
+                        "max_tokens": 1500
+                    }
+                    resp = requests.post(provider["url"], headers=headers, json=payload, timeout=30)
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # Unified parsing: ModelsLab usually mirrors OpenAI or has a 'choices' array
+                    # Note: ModelsLab v7 structure might be slightly different, we check both
+                    if "choices" in data:
+                        return data["choices"][0]["message"]["content"]
+                    elif "output" in data:
+                        return data["output"]
+                    elif "message" in data:
+                        return data["message"]
+                    else:
+                        print(f"Unknown response format from {provider['name']}: {data}")
+                        continue
+                else:
+                    last_error = f"{provider['name']} Error {resp.status_code}: {resp.text}"
+                    print(last_error)
+
+            except Exception as e:
+                print(f"Error calling {provider['name']}: {e}")
+                last_error = str(e)
+
+        return f"All AI providers are currently unavailable. Most recent error: {last_error}"
