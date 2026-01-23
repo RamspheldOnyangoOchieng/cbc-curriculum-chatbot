@@ -1,67 +1,73 @@
+import os
 import requests
 import json
 from .config import Config
 from .retriever import CBCRetriever
+from .knowledge import KnowledgeBase
 
 class CBCEngine:
-    API_URL = "https://api.groq.com/openai/v1/chat/completions"
+    """
+    MASTER AI ENGINE (v3.0): Orchestrates the 'Word-by-Word' Deep Drill search.
+    Designed for precision, speed, and comprehensive content retrieval.
+    """
+    GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
     def __init__(self):
-        Config.validate()
-        self.api_key = Config.GROQ_API_KEY
+        self.api_key = os.getenv("GROQ_API_KEY")
         self.retriever = CBCRetriever()
 
-    def get_chat_response(self, messages):
+    def get_chat_response(self, messages: list) -> str:
         """
-        Retrieves context and sends message history to Groq.
+        Executes the Deep Drill retrieval and synthesizes the final response.
         """
-        # 1. Extract the last user message for retrieval
-        user_query = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        # 1. Get the latest user query
+        user_query = messages[-1].get("content", "")
         
-        # 2. Get relevant context from ChromaDB
+        # 2. PERFORM DEEP DRILL
+        # This will now automatically handle keyword extraction and parallel search
         context = ""
         if user_query:
             try:
-                context = self.retriever.find_relevant_context(user_query)
+                # We fetch a larger breadth of fragments (n_results=10) 
+                # because our Word-by-Word algorithm is now much faster.
+                context = self.retriever.find_relevant_context(user_query, n_results=10)
             except Exception as e:
-                print(f"Retrieval error: {e}")
+                print(f"Deep Drill Error: {e}")
 
-        # 3. Augment the last user message with context (if found)
-        if context:
-            # We don't want to modify the actual session history in a permanent way here, 
-            # so we create a temporary message list for the API call.
-            api_messages = messages[:-1]
-            last_msg = messages[-1].copy()
-            last_msg["content"] = f"Context from CBC Knowledge Base:\n{context}\n\nUser Question: {last_msg['content']}"
-            api_messages.append(last_msg)
-        else:
-            api_messages = messages
+        # 3. MASTER PROMPT SYNTHESIS
+        # We tell the model exactly what it's looking at to improve reasoning.
+        system_prompt = f"""
+{KnowledgeBase.get_system_prompt()}
 
+---
+DATABASE DRILL RESULTS (DEEP SEARCH):
+The following fragments have been retrieved from the CBC Knowledge Base using a Word-by-Word Deep Drill algorithm. 
+Identify related facts across different fragments and synthesize them into a coherent, expert response.
+
+RETRIEVED DATA:
+{context or "NO DIRECT FRAGMENTS FOUND. Answer using general CBC expert knowledge."}
+---
+""".strip()
+        
+        # 4. EXECUTE SYNTHESIS (Llama 3.3 70B)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         
         payload = {
-            "model": Config.MODEL_NAME,
-            "messages": api_messages,
-            "max_tokens": Config.MAX_TOKENS,
-            "temperature": Config.TEMPERATURE,
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "system", "content": system_prompt}] + messages,
+            "temperature": 0.2, # Lower temperature = higher factual reliability
+            "max_tokens": 1500,
             "top_p": 0.9
         }
         
         try:
-            response = requests.post(self.API_URL, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"].strip()
-        
-        except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code
-            if status_code == 401:
-                return "Error: Invalid API Key. Please check your .env file."
-            elif status_code == 429:
-                return "Error: Rate limit exceeded. Please wait a moment."
-            return f"Error: {str(e)}"
+            resp = requests.post(self.GROQ_URL, headers=headers, json=payload, timeout=45)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
         except Exception as e:
-            return f"Error: An unexpected error occurred: {str(e)}"
+            print(f"Groq Synthesis Error: {e}")
+            return "I apologize, but I encountered a network error while synthesizing the multi-drill results. Please try again."
