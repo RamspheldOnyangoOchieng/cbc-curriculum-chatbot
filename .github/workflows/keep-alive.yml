@@ -1,16 +1,26 @@
-name: Keep Backend Awake
+name: Render Keep-Alive & Health Check
 
 on:
   schedule:
-    # Runs every 5 minutes
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # Allows manual trigger
+    # Runs every 14 minutes (Render free tier sleeps after 15 mins of inactivity)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows you to manually trigger this from the "Actions" tab
 
 jobs:
-  ping:
+  keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Render Backend
+      - name: Ping Backend
         run: |
-          curl -s https://cbc-curriculum-chatbot.onrender.com > /dev/null
-          echo "Successfully pinged the backend at $(date)"
+          URL="https://cbc-curriculum-chatbot.onrender.com"
+          echo "Pinging $URL..."
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL")
+          echo "Response Status: $STATUS"
+          if [ "$STATUS" -eq 200 ] || [ "$STATUS" -eq 301 ] || [ "$STATUS" -eq 302 ]; then
+            echo "✅ Backend is AWAKE and healthy."
+          else
+            echo "⚠️ Backend returned $STATUS. It might be sleeping, starting up, or failing."
+            # Optional: Add a second ping after 30s to help cold starts
+            sleep 30
+            curl -s "$URL" > /dev/null
+          fi
