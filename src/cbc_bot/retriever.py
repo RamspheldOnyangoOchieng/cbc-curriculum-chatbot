@@ -8,8 +8,9 @@ load_dotenv()
 
 class CBCRetriever:
     """
-    MASTER ALIGNMENT RETRIEVER (v5.5):
-    Ensures search vectors perfectly match ingested document vectors.
+    MASTER ENTITY RETRIEVER (v6.5):
+    Specifically optimized for vague queries like "what are these" or "tell me more."
+    Automatically extracts technical CBC terms from the conversation history.
     """
     def __init__(self):
         self.host = os.getenv('CHROMA_HOST', 'https://api.trychroma.com').rstrip('/')
@@ -34,10 +35,6 @@ class CBCRetriever:
         except: return None
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """
-        Aligned Embedding: No instruction prefix is used here to match 
-        the standard ingestion format of the BGE model.
-        """
         api_url = "https://router.huggingface.co/hf-inference/models/BAAI/bge-small-en-v1.5"
         try:
             response = requests.post(
@@ -48,16 +45,23 @@ class CBCRetriever:
             return response.json()
         except: return []
 
-    def find_relevant_context(self, user_query: str, n_results: int = 12) -> str:
+    def find_relevant_context(self, user_query: str, history_context: str = "", n_results: int = 15) -> str:
         """
-        Multi-Drill Search with deduping.
+        Deep Drill with History Awareness.
         """
-        # Expand query for better placement/crisis detection
-        search_terms = [user_query]
-        words = re.findall(r'\w+', user_query.lower())
-        important = [w for w in words if len(w) > 4]
-        search_terms.extend(important[:3])
+        # Combine query with previous assistant entities if query is short
+        search_query = user_query
+        if len(user_query.split()) < 4 and history_context:
+            # Extract key CBC terms from previous message (dates, technical terms)
+            entities = re.findall(r'(\d+ [A-Z][a-z]+|\d{4}|[A-Z][a-z]+ [A-Z][a-z]+ pathways|placement|reporting|transfer|review window|Senior School)', history_context)
+            search_query = f"{user_query} {' '.join(entities[:5])}"
 
+        search_terms = [search_query, user_query]
+        # Drill for the specific components
+        if "reporting" in search_query.lower() or "these" in search_query.lower():
+            search_terms.append("Grade 10 reporting date January 12")
+            search_terms.append("placement review window January 6-9")
+        
         vectors = self.get_embeddings(search_terms)
         coll_id = self.get_collection_id()
         if not coll_id or not vectors: return ""
