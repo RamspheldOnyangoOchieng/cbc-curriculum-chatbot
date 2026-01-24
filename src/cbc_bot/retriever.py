@@ -58,9 +58,15 @@ class CBCRetriever:
 
         search_terms = [search_query, user_query]
         # Drill for the specific components
-        if "reporting" in search_query.lower() or "these" in search_query.lower():
-            search_terms.append("Grade 10 reporting date January 12")
-            search_terms.append("placement review window January 6-9")
+        query_l = search_query.lower()
+        if "reporting" in query_l or "these" in query_l:
+            search_terms.extend(["Grade 10 reporting date January 12", "placement review window January 6-9"])
+        
+        if "grade" in query_l or "marks" in query_l or "score" in query_l:
+            search_terms.extend(["60/20/20 rule KJSEA KPSEA SBA", "Achievement Levels EE1 EE2 ME1 ME2"])
+            
+        if "engineer" in query_l or "medicine" in query_l or "stem" in query_l:
+            search_terms.extend(["STEM Pure Sciences mandatory subjects", "Orange Book Addendum June 2025 engineering"])
         
         vectors = self.get_embeddings(search_terms)
         coll_id = self.get_collection_id()

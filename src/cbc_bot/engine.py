@@ -9,8 +9,8 @@ from .knowledge import KnowledgeBase
 
 class CBCEngine:
     """
-    MASTER AI ENGINE (v7.5): Balanced Evidence Edition.
-    Evaluates "Claims" by weighing official guidelines against database evidence.
+    MASTER AI ENGINE (v8.0): Brutal Precision Edition.
+    Forces the AI to use specific numbers, labels, and learning areas.
     """
     MODELSLAB_URL = "https://modelslab.com/api/v7/llm/chat/completions"
     GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -39,36 +39,29 @@ class CBCEngine:
 
         # 1. Handle Simple Greetings
         if self.is_greeting(user_query):
-            return "Habari! I am your CBC Assistant. How can I help you today?"
+            return "Habari! I am your Master CBC Consultant. Tell me specifically what you need to know about Grade 10 pathways or placement."
 
-        # 2. Perform Evidence-Based Search
-        # We increase retrieval for "Claims" or "Purpose" questions to get both sides
-        search_count = 15
-        if any(word in user_query.lower() for word in ["claim", "purpose", "work", "achieving", "crisis"]):
-            search_count = 20
+        # 2. Perform Data-Dense Deep Search
+        # Increase n_results to 20 to find all specific subject lists
+        context = self.retriever.find_relevant_context(user_query, history_context=last_bot_message, n_results=20)
         
-        context = self.retriever.find_relevant_context(user_query, history_context=last_bot_message, n_results=search_count)
-        
-        # 3. EVIDENCE-BASED SYSTEM PROMPT
+        # 3. DATA-DENSE SYSTEM PROMPT
         system_prompt = f"""
 {KnowledgeBase.get_system_prompt()}
-TODAY: {today}
+[SYSTEM TIME]: {today} EAT
 
 ---
-DATABASE EVIDENCE:
-{context or "NO DATA FOUND."}
+SPECIFIC DATABASE EVIDENCE:
+{context or "NO DIRECT FRAGMENTS FOUND. USE HARD FACTS FROM SYSTEM PROMPT."}
 ---
 
-CLAIMS EVALUATION PROTOCOL:
-- If asked "Does it do what it claims?", reason within the context of the CBC system's goals vs. the data in the database.
-- GOALS: Emphasize the shift from exams to skills and the placement of 1.13 million learners.
-- REALITY: Contrast this with the "placement crisis" and "design flaws" mentioned in the database (e.g., 60,000 rejected transfers, "black-box" decision making).
-- STRUCTURE: 
-  1. Brief summary of the system's claim/purpose.
-  2. Bullet points of evidence (numbers/facts) showing what is working.
-  3. Bullet points of evidence showing the "crisis" or areas failing to meet claims.
-  4. Final synthesis: A clear, organized, and brief conclusion.
-- LIMIT: Max 200 words. No AI-talk.
+PRECISION PROTOCOL:
+1. NO VAGUENESS: Do not say 'it varies'. Say 'According to the 60/20/20 rule...' or 'In the STEM Pure Sciences pathway, students must take Physics, Chemistry...'
+2. GRADE DATA: If asked about grades, use the EE1 (90-100%) system explicitly.
+3. SUBJECT DATA: Use the 'Orange Book' evidence above to list mandatory subjects for specific careers.
+4. SYNTHESIS: Join the dots between the user's career interest (e.g. Engineering) and the specific subjects found in the database.
+5. SOURCE CITATION: Refer to 'The Orange Book Addendum (June 2025)' or 'EduPoa Reports' if found in context.
+6. BREVITY: Be extremely brief but carry a high 'Data Density'.
 """.strip()
 
         # 4. PROVIDER HIERARCHY
@@ -87,17 +80,17 @@ CLAIMS EVALUATION PROTOCOL:
                     resp = requests.post(self.MODELSLAB_URL, json={
                         "key": key, "model_id": p["model"], 
                         "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temp": 0.1
-                    }, timeout=25)
+                        "temp": 0.0 # ZERO temp for absolute factual strictness
+                    }, timeout=30)
                 else:
                     resp = requests.post(self.GROQ_URL, headers={"Authorization": f"Bearer {key}"}, json={
                         "model": p["model"], "messages": [{"role": "system", "content": system_prompt}] + messages,
-                        "temperature": 0.1
-                    }, timeout=15)
+                        "temperature": 0.0
+                    }, timeout=20)
 
                 if resp.status_code == 200:
                     data = resp.json()
                     return data.get("choices", [{}])[0].get("message", {}).get("content") or data.get("output") or data.get("message")
             except: continue
 
-        return "Connection busy. Please refresh the page."
+        return "Consultant Connection Error. Please refresh the CBC Dashboard."
